@@ -1,11 +1,12 @@
 import argparse
+import difflib
 import json
 import os
 import re
 import subprocess
 from dataclasses import dataclass
 
-import dockerfile
+from . import dockerfile
 
 _SOURCE_RE = re.compile(r"^cgr\.dev/[^/]+/(?P<repo>[^@:]+)(?::(?P<tag>[^@:]+))?@(?P<digest>.+)$")
 
@@ -54,6 +55,7 @@ class LookerUpper:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("chainguard_org")
+    parser.add_argument("-p", "--dry-run", action="store_true")
     parser.add_argument(
         "-f",
         "--file",
@@ -80,28 +82,35 @@ def main():
     for target in targets:
         parsed = dockerfile.parse_file(target)
         conversions = {}
-        for cmd in parsed:
-            if cmd.cmd == "FROM":
-                source = cmd.value[0]
-                if f"cgr.dev/{args.chainguard_org}" in source:
-                    if "@" in source:
-                        source = ChainguardSource.parse(source)
-                        expected = lu.lookup(source)
-                        if source.digest != expected:
-                            conversions[source.digest] = expected
-                    else:
-                        raise ValueError("un-digested chainguard source found")
+        for source in parsed.from_sources:
+            if f"cgr.dev/{args.chainguard_org}" in source:
+                if "@" in source:
+                    source = ChainguardSource.parse(source)
+                    expected = lu.lookup(source)
+                    if source.digest != expected:
+                        conversions[source.digest] = expected
+                else:
+                    raise ValueError("un-digested chainguard source found")
         if conversions:
+            original = []
             rewritten = []
             with open(target) as f:
                 for line in f:
+                    line = line.rstrip()
+                    original.append(line)
                     for source, dest in conversions.items():
                         if source in line:
                             line = line.replace(source, dest)
                     rewritten.append(line)
-            with open(target, "w") as f:
-                for line in rewritten:
-                    f.write(line)
+            if args.dry_run:
+                for line in difflib.unified_diff(original, rewritten, fromfile=target, tofile=f"{target}.updated"):
+                    print(line)
+                print()
+            else:
+                with open(target, "w") as f:
+                    for line in rewritten:
+                        f.write(line)
+                        f.write("\n")
 
 
 if __name__ == "__main__":
