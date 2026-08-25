@@ -1,0 +1,55 @@
+[project]
+name = "chainguard-image-update"
+version = "0.0.1"
+description = "A tool for bumping pinned chainguard images locally"
+authors = [
+    { name = "Svix", email = "development@svix.com" }
+]
+readme = "README.md"
+requires-python = ">=3.14"
+license = "ISC"
+license-files = ["LICENSE"]
+dependencies = [
+    "dockerfile"
+]
+keywords = [
+    "docker",
+    "chainguard",
+]
+
+[project.scripts]
+chainguard-image-update = "chainguard_image_update.__main__:main"
+
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+
+[tool.hatch.build]
+exclude = [".github/*", "scripts/*", "tests/*", 'uv.lock', "mypy.ini", "/.*"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["chainguard_image_update"]
+
+[dependency-groups]
+dev = [
+    "ty>=0.0.23",
+    "ruff>=0.15.6",
+]
+
+[tool.ruff]
+# we're not on VT220's any more
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # isort
+    "I",
+]
