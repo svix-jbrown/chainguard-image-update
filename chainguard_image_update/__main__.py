@@ -8,11 +8,12 @@ from dataclasses import dataclass
 
 from . import dockerfile
 
-_SOURCE_RE = re.compile(r"^cgr\.dev/[^/]+/(?P<repo>[^@:]+)(?::(?P<tag>[^@:]+))?@(?P<digest>.+)$")
+_SOURCE_RE = re.compile(r"^cgr\.dev/(?P<org>[^/]+)/(?P<repo>[^@:]+)(?::(?P<tag>[^@:]+))?@(?P<digest>.+)$")
 
 
 @dataclass
 class ChainguardSource:
+    org: str
     repo: str
     tag: str | None
     digest: str
@@ -20,7 +21,7 @@ class ChainguardSource:
     @classmethod
     def parse(cls, s: str) -> "ChainguardSource":
         if md := _SOURCE_RE.match(s):
-            return cls(repo=md.group("repo"), tag=md.group("tag"), digest=md.group("digest"))
+            return cls(repo=md.group("repo"), tag=md.group("tag"), digest=md.group("digest"), org=md.group("org"))
         else:
             raise ValueError(f"Invalid source {s}")
 
@@ -41,7 +42,10 @@ class LookerUpper:
 
     def lookup(self, source: ChainguardSource) -> str:
         if source.key not in self.latest_versions:
-            data = subprocess.check_output(["chainctl", "images", "tags", "list", "--repo", source.repo, "-o", "json"])
+            command = ["chainctl", "images", "tags", "list", "--repo", source.repo, "-o", "json"]
+            if source.org == "chainguard":
+                command += ["--public"]
+            data = subprocess.check_output(command)
             data = json.loads(data)
             for row in data:
                 if row["name"] == source.effective_tag:
@@ -54,7 +58,6 @@ class LookerUpper:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("chainguard_org")
     parser.add_argument("-p", "--dry-run", action="store_true")
     parser.add_argument(
         "-f",
@@ -83,7 +86,7 @@ def main():
         parsed = dockerfile.parse_file(target)
         conversions = {}
         for source in parsed.from_sources:
-            if f"cgr.dev/{args.chainguard_org}" in source:
+            if "cgr.dev/" in source:
                 if "@" in source:
                     source = ChainguardSource.parse(source)
                     expected = lu.lookup(source)
